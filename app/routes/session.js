@@ -10,6 +10,9 @@ function SessionHandler(db) {
 
     const userDAO = new UserDAO(db);
     const allocationsDAO = new AllocationsDAO(db);
+    const loginAttempts = new Map();
+    const windowMs = 15 * 60 * 1000;
+
 
     const prepareUserData = (user, next) => {
         // Generate random allocations
@@ -55,50 +58,33 @@ function SessionHandler(db) {
             userName,
             password
         } = req.body;
+        const now = Date.now();
+        for (const [key, value] of loginAttempts) {
+            if (value.expires <= now) loginAttempts.delete(key);
+        }
+        const keys = ["ip:" + req.ip, "user:" + String(userName).toLowerCase()];
+        if (keys.some(key => loginAttempts.has(key) && loginAttempts.get(key).count >= 10)) {
+            return res.status(429).send("Too many login attempts. Try again later.");
+        }
+        if (loginAttempts.size >= 10000) return res.status(429).send("Too many login attempts. Try again later.");
+        keys.forEach(key => {
+            const entry = loginAttempts.get(key) || { count: 0, expires: now + windowMs };
+            entry.count++;
+            loginAttempts.set(key, entry);
+        });
+        if (typeof userName !== "string" || typeof password !== "string") {
+            return res.status(400).send("Invalid username and/or password");
+        }
         userDAO.validateLogin(userName, password, (err, user) => {
-            const errorMessage = "Invalid username and/or password";
-            const invalidUserNameErrorMessage = "Invalid username";
-            const invalidPasswordErrorMessage = "Invalid password";
             if (err) {
-                if (err.noSuchUser) {
-                    console.log("Error: attempt to login with invalid user: ", userName);
-
-                    // Fix for A1 - 3 Log Injection - encode/sanitize input for CRLF Injection
-                    // that could result in log forging:
-                    // - Step 1: Require a module that supports encoding
-                    // const ESAPI = require('node-esapi');
-                    // - Step 2: Encode the user input that will be logged in the correct context
-                    // following are a few examples:
-                    // console.log('Error: attempt to login with invalid user: %s',
-                    //     ESAPI.encoder().encodeForHTML(userName));
-                    // console.log('Error: attempt to login with invalid user: %s',
-                    //     ESAPI.encoder().encodeForJavaScript(userName));
-                    // console.log('Error: attempt to login with invalid user: %s',
-                    //     ESAPI.encoder().encodeForURL(userName));
-                    // or if you know that this is a CRLF vulnerability you can target this specifically as follows:
-                    // console.log('Error: attempt to login with invalid user: %s',
-                    //     userName.replace(/(\r\n|\r|\n)/g, '_'));
-
-                    return res.render("login", {
-                        userName: userName,
-                        password: "",
-                        loginError: invalidUserNameErrorMessage,
-                        //Fix for A2-2 Broken Auth - Uses identical error for both username, password error
-                        // loginError: errorMessage
-                        environmentalScripts
-                    });
-                } else if (err.invalidPassword) {
-                    return res.render("login", {
-                        userName: userName,
-                        password: "",
-                        loginError: invalidPasswordErrorMessage,
-                        //Fix for A2-2 Broken Auth - Uses identical error for both username, password error
-                        // loginError: errorMessage
-                        environmentalScripts
-                    });
-                } else {
-                    return next(err);
-                }
+                if (!err.noSuchUser && !err.invalidPassword) return next(err);
+                console.log("Failed login attempt");
+                return res.render("login", {
+                    userName,
+                    password: "",
+                    loginError: "Invalid username and/or password",
+                    environmentalScripts
+                });
             }
 
             // A2-Broken Authentication and Session Management
@@ -141,7 +127,7 @@ function SessionHandler(db) {
         const FNAME_RE = /^.{1,100}$/;
         const LNAME_RE = /^.{1,100}$/;
         const EMAIL_RE = /^[\S]+@[\S]+\.[\S]+$/;
-        const PASS_RE = /^.{1,20}$/;
+        const PASS_RE = /^(?=.*[0-9])(?=.*[a-z])(?=.*[A-Z]).{8,18}$/;
         /*
         //Fix for A2-2 - Broken Authentication -  requires stronger password
         //(at least 8 characters with numbers and both lowercase and uppercase letters.)
@@ -156,7 +142,7 @@ function SessionHandler(db) {
         errors.verifyError = "";
         errors.emailError = "";
 
-        if (!USER_RE.test(userName)) {
+        if (typeof userName !== "string" || !USER_RE.test(userName)) {
             errors.userNameError = "Invalid user name.";
             return false;
         }
@@ -168,7 +154,7 @@ function SessionHandler(db) {
             errors.lastNameError = "Invalid last name.";
             return false;
         }
-        if (!PASS_RE.test(password)) {
+        if (typeof password !== "string" || !PASS_RE.test(password)) {
             errors.passwordError = "Password must be 8 to 18 characters" +
                 " including numbers, lowercase and uppercase letters.";
             return false;
@@ -210,11 +196,8 @@ function SessionHandler(db) {
                 if (err) return next(err);
 
                 if (user) {
-                    errors.userNameError = "User name already in use. Please choose another";
-                    return res.render("signup", {
-                        ...errors,
-                        environmentalScripts
-                    });
+                    require("bcrypt-nodejs").hashSync(password, require("bcrypt-nodejs").genSaltSync(10));
+                    return res.redirect("/login");
                 }
 
                 userDAO.addUser(userName, firstName, lastName, password, email, (err, user) => {
@@ -231,16 +214,7 @@ function SessionHandler(db) {
                         return res.render("dashboard", { ...user, environmentalScripts });
                     });
                     */
-                    req.session.regenerate(() => {
-                        req.session.userId = user._id;
-                        // Set userId property. Required for left nav menu links
-                        user.userId = user._id;
-
-                        return res.render("dashboard", {
-                            ...user,
-                            environmentalScripts
-                        });
-                    });
+                    return res.redirect("/login");
 
                 });
             });

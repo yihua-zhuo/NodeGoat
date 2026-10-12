@@ -1,7 +1,7 @@
 const ProfileDAO = require("../data/profile-dao").ProfileDAO;
 const ESAPI = require("node-esapi");
 const {
-    environmentalScripts
+    environmentalScripts, cryptoKey
 } = require("../../config/config");
 
 /* The ProfileHandler must be constructed with a connected db */
@@ -20,6 +20,7 @@ function ProfileHandler(db) {
         profile.getByUserId(parseInt(userId), (err, doc) => {
             if (err) return next(err);
             doc.userId = userId;
+            doc.firstNameSafeString = doc.firstName;
 
             // @TODO @FIXME
             // while the developer intentions were correct in encoding the user supplied input so it
@@ -56,9 +57,9 @@ function ProfileHandler(db) {
         // --
         // The Fix: Instead of using greedy quantifiers the same regex will work if we omit the second quantifier +
         // const regexPattern = /([0-9]+)\#/;
-        const regexPattern = /([0-9]+)+\#/;
+        const regexPattern = /^[0-9]{1,32}#$/;
         // Allow only numbers with a suffix of the letter #, for example: 'XXXXXX#'
-        const testComplyWithRequirements = regexPattern.test(bankRouting);
+        const testComplyWithRequirements = typeof bankRouting === "string" && regexPattern.test(bankRouting);
         // if the regex test fails we do not allow saving
         if (testComplyWithRequirements !== true) {
             const firstNameSafeString = firstName;
@@ -95,6 +96,11 @@ function ProfileHandler(db) {
                 // WARN: Applying any sting specific methods here w/o checking type of inputs could lead to DoS by HPP
                 //firstName = firstName.trim();
                 user.updateSuccess = true;
+                user.firstNameSafeString = user.firstName;
+                if (!cryptoKey && [ssn, dob, address, bankAcc, bankRouting].some(Boolean)) {
+                    user.updateSuccess = false;
+                    user.updateError = "Names saved; sensitive details were not retained because encrypted storage is not configured.";
+                }
                 user.userId = userId;
 
                 return res.render("profile", {

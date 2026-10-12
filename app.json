@@ -9,9 +9,7 @@
   "website": "https://www.owasp.org/index.php/Projects/OWASP_Node_js_Goat_Project",
   "logo": "https://www.owasp.org/skins/owasplogo.png",
   "success_url": "/login",
-  "scripts": {
-    "postdeploy": "node artifacts/db-reset.js"
-  },
+  "scripts": {},
   "env": {
     "MONGODB_URI": {
       "description": "Connection string for MongoDB database to use. Must be publicly accessible.",

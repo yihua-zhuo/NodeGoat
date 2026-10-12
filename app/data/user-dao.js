@@ -1,4 +1,5 @@
 const bcrypt = require("bcrypt-nodejs");
+const dummyHash = bcrypt.hashSync(require("crypto").randomBytes(32).toString("hex"), bcrypt.genSaltSync(10));
 
 /* The UserDAO must be constructed with a connected database object */
 function UserDAO(db) {
@@ -22,7 +23,7 @@ function UserDAO(db) {
             firstName,
             lastName,
             benefitStartDate: this.getRandomFutureDate(),
-            password //received from request param
+            password: bcrypt.hashSync(password, bcrypt.genSaltSync(10))
             /*
             // Fix for A2-1 - Broken Auth
             // Stores password  in a safer way using one way encryption and salt hashing
@@ -58,7 +59,8 @@ function UserDAO(db) {
 
         // Helper function to compare passwords
         const comparePassword = (fromDB, fromUser) => {
-            return fromDB === fromUser;
+            return typeof fromDB === "string" && typeof fromUser === "string" &&
+                /^\$2[aby]\$/.test(fromUser) && bcrypt.compareSync(fromDB, fromUser);
             /*
             // Fix for A2-Broken Auth
             // compares decrypted password stored in this.addUser()
@@ -81,6 +83,7 @@ function UserDAO(db) {
                     callback(invalidPasswordError, null);
                 }
             } else {
+                if (typeof password === "string") bcrypt.compareSync(password, dummyHash);
                 const noSuchUserError = new Error("User: " + user + " does not exist");
                 // Set an extra field so we can distinguish this from a db error
                 noSuchUserError.noSuchUser = true;
