@@ -13,10 +13,11 @@
             <div class="panel-body">
 
                 <form action="/memos" method="post" role="search">
+                    <input type="hidden" name="_csrf" value="{{csrftoken}}">
 
                     <div class="form-group">
                         <textarea class="form-control" name="memo"></textarea>
-                        <p class="help-block">You may use Markdown syntax to format your memo</p>
+                        <p class="help-block">Memos are displayed as plain text</p>
                     </div>
 
                     <button type="submit" class="btn btn-primary">Submit</button>
@@ -28,7 +29,7 @@
         {% for doc in memosList %}
         <div class="panel panel-info">
             <div class="panel-body">
-                {{ marked(doc.memo) }}
+                <pre>{{ doc.memo }}</pre>
             </div>
         </div>
         {% endfor %}

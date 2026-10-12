@@ -15,7 +15,7 @@ const USERS_TO_INSERT = [
         "userName": "admin",
         "firstName": "Node Goat",
         "lastName": "Admin",
-        "password": "Admin_123",
+        "password": require("bcrypt-nodejs").hashSync(require("crypto").randomBytes(32).toString("hex")),
         //"password" : "$2a$10$8Zo/1e8KM8QzqOKqbDlYlONBOzukWXrM.IiyzqHRYDXqwB3gzDsba", // Admin_123
         "isAdmin": true
     }, {
@@ -24,7 +24,7 @@ const USERS_TO_INSERT = [
         "firstName": "John",
         "lastName": "Doe",
         "benefitStartDate": "2030-01-10",
-        "password": "User1_123"
+        "password": require("bcrypt-nodejs").hashSync(require("crypto").randomBytes(32).toString("hex"))
         // "password" : "$2a$10$RNFhiNmt2TTpVO9cqZElb.LQM9e1mzDoggEHufLjAnAKImc6FNE86",// User1_123
     }, {
         "_id": 3,
@@ -32,7 +32,7 @@ const USERS_TO_INSERT = [
         "firstName": "Will",
         "lastName": "Smith",
         "benefitStartDate": "2025-11-30",
-        "password": "User2_123"
+        "password": require("bcrypt-nodejs").hashSync(require("crypto").randomBytes(32).toString("hex"))
         //"password" : "$2a$10$Tlx2cNv15M0Aia7wyItjsepeA8Y6PyBYaNdQqvpxkIUlcONf1ZHyq", // User2_123
     }];
 
@@ -51,11 +51,11 @@ const parseResponse = (err, res, comm) => {
     if (err) {
         console.log("ERROR:");
         console.log(comm);
-        console.log(JSON.stringify(err));
+
         process.exit(1);
     }
     console.log(comm);
-    console.log(JSON.stringify(res));
+
 };
 
 
@@ -63,7 +63,7 @@ const parseResponse = (err, res, comm) => {
 MongoClient.connect(db, (err, db) =>  {
     if (err) {
         console.log("ERROR: connect");
-        console.log(JSON.stringify(err));
+
         process.exit(1);
     }
     console.log("Connected to the database");
@@ -96,7 +96,7 @@ MongoClient.connect(db, (err, db) =>  {
 
         // insert admin and test users
         console.log("Users to insert:");
-        USERS_TO_INSERT.forEach((user) => console.log(JSON.stringify(user)));
+
 
         usersCol.insertMany(USERS_TO_INSERT, (err, data) => {
             const finalAllocations = [];
@@ -104,7 +104,7 @@ MongoClient.connect(db, (err, db) =>  {
             // We can't continue if error here
             if (err) {
                 console.log("ERROR: insertMany");
-                console.log(JSON.stringify(err));
+
                 process.exit(1);
             }
             parseResponse(err, data, "users.insertMany");

@@ -4,13 +4,13 @@ const express = require("express");
 const favicon = require("serve-favicon");
 const bodyParser = require("body-parser");
 const session = require("express-session");
-// const csrf = require('csurf');
+const csrf = require('csurf');
 const consolidate = require("consolidate"); // Templating library adapter for Express
 const swig = require("swig");
 // const helmet = require("helmet");
 const MongoClient = require("mongodb").MongoClient; // Driver for connecting to MongoDB
 const http = require("http");
-const marked = require("marked");
+
 //const nosniff = require('dont-sniff-mimetype');
 const app = express(); // Web framework to handle routing requests
 const routes = require("./app/routes");
@@ -30,7 +30,7 @@ const httpsOptions = {
 MongoClient.connect(db, (err, db) => {
     if (err) {
         console.log("Error: DB: connect");
-        console.log(err);
+
         process.exit(1);
     }
     console.log(`Connected to the database`);
@@ -64,6 +64,14 @@ MongoClient.connect(db, (err, db) => {
     app.use(nosniff());
     */
 
+    if (process.env.TRUSTED_PROXY) app.set("trust proxy", process.env.TRUSTED_PROXY);
+    app.use((req, res, next) => {
+        if (!req.secure) return res.status(403).send("HTTPS is required");
+        res.setHeader("Strict-Transport-Security", "max-age=31536000");
+        res.setHeader("X-Content-Type-Options", "nosniff");
+        next();
+    });
+
     // Adding/ remove HTTP Headers for security
     app.use(favicon(__dirname + "/app/assets/favicon.ico"));
 
@@ -82,7 +90,8 @@ MongoClient.connect(db, (err, db) => {
         secret: cookieSecret,
         // Both mandatory in Express v4
         saveUninitialized: true,
-        resave: true
+        resave: true,
+        cookie: { secure: true, httpOnly: true, sameSite: "lax" }
         /*
         // Fix for A5 - Security MisConfig
         // Use generic cookie name
@@ -101,16 +110,18 @@ MongoClient.connect(db, (err, db) => {
 
     }));
 
-    /*
     // Fix for A8 - CSRF
     // Enable Express csrf protection
     app.use(csrf());
+    app.use((err, req, res, next) => {
+        if (err.code === "EBADCSRFTOKEN") return res.status(403).send("Invalid CSRF token");
+        return next(err);
+    });
     // Make csrf token available in templates
     app.use((req, res, next) => {
         res.locals.csrftoken = req.csrfToken();
         next();
     });
-    */
 
     // Register templating engine
     app.engine(".html", consolidate.swig);
@@ -121,28 +132,26 @@ MongoClient.connect(db, (err, db) => {
     app.use(express.static(`${__dirname}/app/assets`));
 
 
-    // Initializing marked library
-    // Fix for A9 - Insecure Dependencies
-    marked.setOptions({
-        sanitize: true
-    });
-    app.locals.marked = marked;
-
     // Application routes
     routes(app, db);
 
     // Template system setup
     swig.setDefaults({
-        // Autoescape disabled
-        autoescape: false
+        // Escape untrusted values in all templates
+        autoescape: true
         /*
         // Fix for A3 - XSS, enable auto escaping
         autoescape: true // default value
         */
     });
 
-    // Insecure HTTP connection
-    http.createServer(app).listen(port, () => {
+    // HTTP is available only behind an explicitly trusted TLS proxy.
+    const listener = process.env.TLS_KEY_FILE && process.env.TLS_CERT_FILE ?
+        require("https").createServer({
+            key: require("fs").readFileSync(process.env.TLS_KEY_FILE),
+            cert: require("fs").readFileSync(process.env.TLS_CERT_FILE)
+        }, app) : http.createServer(app);
+    listener.listen(port, () => {
         console.log(`Express http server listening on port ${port}`);
     });
 
